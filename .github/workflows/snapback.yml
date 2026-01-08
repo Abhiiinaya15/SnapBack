@@ -3,6 +3,23 @@ name: Snapback Rollback Workflow
 
 on:
   workflow_dispatch: # Manual trigger
+    inputs:
+      service_key:
+        description: Service key (e.g., orders-api)
+        required: true
+        type: string
+      service_type:
+        description: Service type (k8s|appservice|db|functions)
+        required: true
+        type: string
+      namespace:
+        description: Namespace/environment (e.g., prod)
+        required: true
+        type: string
+      deployment_name:
+        description: Deployment name (e.g., orders-api-deployment)
+        required: true
+        type: string
   push:
     branches: [ "main" ]
 
@@ -52,34 +69,49 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Show execution mode
+      - name: Show execution mode and inputs
         run: |
           echo "SAFE_MODE=${SAFE_MODE}"
           echo "AUTO_EXECUTE=${AUTO_EXECUTE}"
+          echo "Inputs:"
+          echo "  service_key:   ${{ github.event.inputs.service_key }}"
+          echo "  service_type:  ${{ github.event.inputs.service_type }}"
+          echo "  namespace:     ${{ github.event.inputs.namespace }}"
+          echo "  deployment_name: ${{ github.event.inputs.deployment_name }}"
 
       - name: Execute Kubernetes Rollback
+        if: ${{ github.event.inputs.service_type == 'k8s' }}
         shell: bash
         run: |
           if [ "${SAFE_MODE}" = "true" ]; then
-            echo "Dry-run: Would rollback Kubernetes deployment: orders-api (namespace: prod)"
+            echo "Dry-run: Would rollback Kubernetes deployment: ${{ github.event.inputs.deployment_name }} (namespace: ${{ github.event.inputs.namespace }})"
           else
-            ./scripts/rollback_k8s.sh orders-api prod
+            ./scripts/rollback_k8s.sh "${{ github.event.inputs.deployment_name }}" "${{ github.event.inputs.namespace }}"
           fi
 
       - name: Execute App Service Rollback
+        if: ${{ github.event.inputs.service_type == 'appservice' }}
         shell: bash
         run: |
           if [ "${SAFE_MODE}" = "true" ]; then
-            echo "Dry-run: Would swap App Service slots: MyApp (staging -> production)"
+            echo "Dry-run: Would swap App Service slots for ${{ github.event.inputs.service_key }} (staging -> production)"
           else
+            # You can pass RG/AppName via additional inputs if needed
             ./scripts/rollback_appservice.sh MyResourceGroup MyApp staging production
           fi
 
       - name: Execute DB Rollback
+        if: ${{ github.event.inputs.service_type == 'db' }}
         shell: bash
         run: |
           if [ "${SAFE_MODE}" = "true" ]; then
-            echo "Dry-run: Would downgrade DB schema to revision -1"
+            echo "Dry-run: Would downgrade DB schema for service ${{ github.event.inputs.service_key }} to revision -1"
           else
             ./scripts/rollback_db.sh -1
           fi
+
+      - name: Execute Functions Rollback
+        if: ${{ github.event.inputs.service_type == 'functions' }}
+        shell: bash
+        run: |
+          echo "Functions rollback not yet implemented in this workflow. Add script/logic as needed."
