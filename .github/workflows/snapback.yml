@@ -6,7 +6,7 @@ on:
   push:
     branches: [ "main" ]
 
-# Global permissions for GITHUB_TOKEN
+# Ensure GITHUB_TOKEN can create issues
 permissions:
   contents: read
   issues: write
@@ -29,20 +29,22 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     permissions:
-      issues: write
       contents: read
+      issues: write
     steps:
       - name: Manual Approval Gate
         uses: trstringer/manual-approval@v1
         with:
-          approvers: Abhiiinaya15, Abhiinaya15
+          # Single approver (must be a collaborator with write access)
+          approvers: Abhiiinaya15
           minimum-approvals: 1
           issue-title: "Approve Snapback Rollback Execution"
           issue-body: |
-            Approve to switch AUTO_EXECUTE=true and SAFE_MODE=false for production rollback.
-            This will run Kubernetes/App Service/DB rollback scripts.
+            > [!NOTE]
+            > Workflow is pending manual review.
+            > Respond "approved", "approve", "lgtm", or "yes" to continue.
+            > Respond "denied", "deny", or "no" to cancel.
           secret: ${{ secrets.GITHUB_TOKEN }}
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
   execute-rollback:
     needs: approval
