@@ -1,0 +1,60 @@
+
+name: Snapback Rollback Workflow
+
+on:
+  workflow_dispatch: # Manual trigger
+  push:
+    branches: [ "main" ]
+
+env:
+  SAFE_MODE: "true" # Dry-run by default
+  AUTO_EXECUTE: "false" # Requires approval
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Scripts
+        run: |
+          echo "Checking rollback scripts..."
+          ls scripts/
+
+  approval:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Manual Approval Gate
+        uses: trstringer/manual-approval@v1
+        with:
+          approvers: team@example.com
+          minimum-approvals: 1
+          issue-title: "Approve Snapback Rollback Execution"
+          issue-body: "Approve to switch AUTO_EXECUTE=true and SAFE_MODE=false for production rollback."
+
+  execute-rollback:
+    needs: approval
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Execute Kubernetes Rollback
+        run: |
+          if [ "$SAFE_MODE" = "true" ]; then
+            echo "Dry-run: Would rollback Kubernetes deployment"
+          else
+            ./scripts/rollback_k8s.sh orders-api prod
+          fi
+      - name: Execute App Service Rollback
+        run: |
+          if [ "$SAFE_MODE" = "true" ]; then
+            echo "Dry-run: Would swap App Service slots"
+          else
+            ./scripts/rollback_appservice.sh MyResourceGroup MyApp staging production
+          fi
+      - name: Execute DB Rollback
+        run: |
+          if [ "$SAFE_MODE" = "true" ]; then
+            echo "Dry-run: Would downgrade DB schema"
+          else
+            ./scripts/rollback_db.sh -1
+          fi
