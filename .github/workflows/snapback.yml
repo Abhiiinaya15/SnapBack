@@ -6,8 +6,13 @@ on:
   push:
     branches: [ "main" ]
 
+# Global permissions for GITHUB_TOKEN
+permissions:
+  contents: read
+  issues: write
+
 env:
-  SAFE_MODE: "true" # Dry-run by default
+  SAFE_MODE: "true"     # Dry-run by default
   AUTO_EXECUTE: "false" # Requires approval
 
 jobs:
@@ -18,43 +23,61 @@ jobs:
       - name: Validate Scripts
         run: |
           echo "Checking rollback scripts..."
-          ls scripts/
+          ls scripts/ || (echo "scripts folder missing" && exit 1)
 
   approval:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
     steps:
       - name: Manual Approval Gate
         uses: trstringer/manual-approval@v1
         with:
-          approvers: team@example.com
+          approvers: Abhiiinaya15, Abhiinaya15
           minimum-approvals: 1
           issue-title: "Approve Snapback Rollback Execution"
-          issue-body: "Approve to switch AUTO_EXECUTE=true and SAFE_MODE=false for production rollback."
+          issue-body: |
+            Approve to switch AUTO_EXECUTE=true and SAFE_MODE=false for production rollback.
+            This will run Kubernetes/App Service/DB rollback scripts.
+          secret: ${{ secrets.GITHUB_TOKEN }}
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
   execute-rollback:
     needs: approval
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Execute Kubernetes Rollback
+
+      - name: Show execution mode
         run: |
-          if [ "$SAFE_MODE" = "true" ]; then
-            echo "Dry-run: Would rollback Kubernetes deployment"
+          echo "SAFE_MODE=${SAFE_MODE}"
+          echo "AUTO_EXECUTE=${AUTO_EXECUTE}"
+
+      - name: Execute Kubernetes Rollback
+        shell: bash
+        run: |
+          if [ "${SAFE_MODE}" = "true" ]; then
+            echo "Dry-run: Would rollback Kubernetes deployment: orders-api (namespace: prod)"
           else
             ./scripts/rollback_k8s.sh orders-api prod
           fi
+
       - name: Execute App Service Rollback
+        shell: bash
         run: |
-          if [ "$SAFE_MODE" = "true" ]; then
-            echo "Dry-run: Would swap App Service slots"
+          if [ "${SAFE_MODE}" = "true" ]; then
+            echo "Dry-run: Would swap App Service slots: MyApp (staging -> production)"
           else
             ./scripts/rollback_appservice.sh MyResourceGroup MyApp staging production
           fi
+
       - name: Execute DB Rollback
+        shell: bash
         run: |
-          if [ "$SAFE_MODE" = "true" ]; then
-            echo "Dry-run: Would downgrade DB schema"
+          if [ "${SAFE_MODE}" = "true" ]; then
+            echo "Dry-run: Would downgrade DB schema to revision -1"
           else
             ./scripts/rollback_db.sh -1
           fi
