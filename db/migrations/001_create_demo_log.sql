@@ -1,0 +1,7 @@
+
+
+CREATE TABLE IF NOT EXISTS demo_log (
+  id SERIAL PRIMARY KEY,
+  msg TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
