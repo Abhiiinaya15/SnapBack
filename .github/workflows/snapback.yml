@@ -29,7 +29,7 @@ permissions:
   issues: write
 
 env:
-  SAFE_MODE: "true"     # Dry-run by default
+  SAFE_MODE: "false"     # Dry-run by default
   AUTO_EXECUTE: "false" # Requires approval
 
 jobs:
