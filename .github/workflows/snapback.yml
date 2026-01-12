@@ -1,4 +1,3 @@
-
 name: Snapback Rollback Workflow
 
 on:
@@ -63,95 +62,95 @@ jobs:
             > Respond "denied", "deny", or "no" to cancel.
           secret: ${{ secrets.GITHUB_TOKEN }}
 
- 
-execute-rollback:
-  needs: approval
-  runs-on: ubuntu-latest
+  
+  execute-rollback:
+    needs: approval
+    runs-on: ubuntu-latest
 
-  # Start a real PostgreSQL instance as a service for this job
-  services:
-    postgres:
-      image: postgres:16
-      env:
-        POSTGRES_USER: snapback
-        POSTGRES_PASSWORD: snapback
-        POSTGRES_DB: snapback
-      ports:
-        - 5432:5432
-      options: >-
-        --health-cmd "pg_isready -U snapback -d snapback"
-        --health-interval 10s
-        --health-timeout 5s
-        --health-retries 10
+    # Start a real PostgreSQL instance as a service for this job
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: snapback
+          POSTGRES_PASSWORD: snapback
+          POSTGRES_DB: snapback
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U snapback -d snapback"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
 
-  steps:
-    - uses: actions/checkout@v4
+    steps:
+      - uses: actions/checkout@v4
 
-    - name: Show execution mode and inputs
-      run: |
-        echo "SAFE_MODE=${SAFE_MODE}"
-        echo "AUTO_EXECUTE=${AUTO_EXECUTE}"
-        echo "Inputs:"
-        echo "  service_key:     ${{ github.event.inputs.service_key }}"
-        echo "  service_type:    ${{ github.event.inputs.service_type }}"
-        echo "  namespace:       ${{ github.event.inputs.namespace }}"
-        echo "  deployment_name: ${{ github.event.inputs.deployment_name }}"
+      - name: Show execution mode and inputs
+        run: |
+          echo "SAFE_MODE=${SAFE_MODE}"
+          echo "AUTO_EXECUTE=${AUTO_EXECUTE}"
+          echo "Inputs:"
+          echo "  service_key:     ${{ github.event.inputs.service_key }}"
+          echo "  service_type:    ${{ github.event.inputs.service_type }}"
+          echo "  namespace:       ${{ github.event.inputs.namespace }}"
+          echo "  deployment_name: ${{ github.event.inputs.deployment_name }}"
 
-    - name: Ensure DB scripts are executable
-      run: |
-        chmod +x scripts/db_pg_migrate.sh || true
-        chmod +x scripts/db_pg_rollback.sh || true
+      - name: Ensure DB scripts are executable
+        run: |
+          chmod +x scripts/db_pg_migrate.sh || true
+          chmod +x scripts/db_pg_rollback.sh || true
 
-    - name: Install psql client
-      if: ${{ github.event.inputs.service_type == 'db' }}
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y postgresql-client
+      - name: Install psql client
+        if: ${{ github.event.inputs.service_type == 'db' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
 
-    - name: Wait for Postgres to be healthy
-      if: ${{ github.event.inputs.service_type == 'db' }}
-      run: |
-        for i in {1..20}; do
-          pg_isready -h localhost -p 5432 -U snapback -d snapback && break
-          echo "Waiting for Postgres..."
-          sleep 3
-        done
+      - name: Wait for Postgres to be healthy
+        if: ${{ github.event.inputs.service_type == 'db' }}
+        run: |
+          for i in {1..20}; do
+            pg_isready -h localhost -p 5432 -U snapback -d snapback && break
+            echo "Waiting for Postgres..."
+            sleep 3
+          done
 
-    - name: Export DB connection env
-      if: ${{ github.event.inputs.service_type == 'db' }}
-      run: |
-        echo "PGHOST=localhost"   >> $GITHUB_ENV
-        echo "PGPORT=5432"        >> $GITHUB_ENV
-        echo "PGUSER=snapback"    >> $GITHUB_ENV
-        echo "PGPASSWORD=snapback">> $GITHUB_ENV
-        echo "PGDATABASE=snapback">> $GITHUB_ENV
+      - name: Export DB connection env
+        if: ${{ github.event.inputs.service_type == 'db' }}
+        run: |
+          echo "PGHOST=localhost"   >> $GITHUB_ENV
+          echo "PGPORT=5432"        >> $GITHUB_ENV
+          echo "PGUSER=snapback"    >> $GITHUB_ENV
+          echo "PGPASSWORD=snapback">> $GITHUB_ENV
+          echo "PGDATABASE=snapback">> $GITHUB_ENV
 
-    - name: Migrate (create table)
-      if: ${{ github.event.inputs.service_type == 'db' }}
-      shell: bash
-      env:
-        PGPASSWORD: snapback
-      run: |
-        if [ "${SAFE_MODE}" = "true" ]; then
-          echo "Dry-run: Would apply migration (create table demo_log)"
-        else
-          bash scripts/db_pg_migrate.sh
-          psql -h localhost -U snapback -d snapback -c "INSERT INTO demo_log(msg) VALUES ('pre-rollback record');"
-          echo "[verify] Inserted a row before rollback"
-        fi
+      - name: Migrate (create table)
+        if: ${{ github.event.inputs.service_type == 'db' }}
+        shell: bash
+        env:
+          PGPASSWORD: snapback
+        run: |
+          if [ "${SAFE_MODE}" = "true" ]; then
+            echo "Dry-run: Would apply migration (create table demo_log)"
+          else
+            bash scripts/db_pg_migrate.sh
+            psql -h localhost -U snapback -d snapback -c "INSERT INTO demo_log(msg) VALUES ('pre-rollback record');"
+            echo "[verify] Inserted a row before rollback"
+          fi
 
-    - name: Rollback (drop table)
-      if: ${{ github.event.inputs.service_type == 'db' }}
-      shell: bash
-      env:
-        PGPASSWORD: snapback
-      run: |
-        if [ "${SAFE_MODE}" = "true" ]; then
-          echo "Dry-run: Would rollback (drop table demo_log)"
-        else
-          bash scripts/db_pg_rollback.sh
-        fi
+      - name: Rollback (drop table)
+        if: ${{ github.event.inputs.service_type == 'db' }}
+        shell: bash
+        env:
+          PGPASSWORD: snapback
+        run: |
+          if [ "${SAFE_MODE}" = "true" ]; then
+            echo "Dry-run: Would rollback (drop table demo_log)"
+          else
+            bash scripts/db_pg_rollback.sh
+          fi
 
-    - name: Summary
-      if: ${{ github.event.inputs.service_type == 'db' }}
-      run: echo "✅ PostgreSQL rollback completed for ${{ github.event.inputs.service_key }}"
+      - name: Summary
+        if: ${{ github.event.inputs.service_type == 'db' }}
+        run: echo "✅ PostgreSQL rollback completed for ${{ github.event.inputs.service_key }}"
